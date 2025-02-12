@@ -8,24 +8,23 @@ import {
  Body,
  BadRequestException,
  Sse,
- MessageEvent,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-import { Observable } from 'rxjs';
-import { ApiConsumes, ApiOperation, ApiResponse, ApiTags, ApiBody, ApiParam } from '@nestjs/swagger';
+import { map, Observable } from 'rxjs';
+import { ApiConsumes, ApiOperation, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 import { EvaluationService } from './evaluation.service';
 import { EvaluateResponseDto } from './dto/evaluate-response.dto';
 import { EvaluateRequestDto } from './dto/evaluate-request.dto';
 import { Express } from 'express';
 
 @ApiTags('Evaluation')
-@Controller('evaluate')
+@Controller()
 export class EvaluationController {
  constructor(private readonly evaluationService: EvaluationService) { }
 
- @Post()
+ @Post('evaluate')
  @UseInterceptors(FileInterceptor('resume', {
   storage: diskStorage({
    destination: './uploads',
@@ -58,21 +57,20 @@ export class EvaluationController {
  }
 
  @Get('stream/:jobId')
- @Sse() // Enables Server-Sent Events
- @ApiOperation({ summary: 'Stream AI evaluation results in real-time' })
- @ApiParam({ name: 'jobId', required: true, description: 'Unique Job ID' })
- @ApiResponse({
-  status: 200,
-  description: 'Streaming AI evaluation results',
-  content: { 'text/event-stream': {} },
- })
- streamEvaluation(@Param('jobId') jobId: string): Observable<MessageEvent> {
-  return new Observable((observer) => {
-   this.evaluationService.streamEvaluation(jobId).subscribe({
-    next: (data) => observer.next({ data: JSON.stringify(data) }),
-    error: (err) => observer.error(err),
-    complete: () => observer.complete(),
-   });
-  });
- }
+ @ApiOperation({ summary: 'Stream AI-generated resume evaluation results in real-time' })
+ @ApiResponse({ status: 200, description: 'Streaming AI response line by line' })
+ @Sse()
+ streamResults(@Param('jobId') jobId: string): Observable<MessageEvent> {
+  return this.evaluationService.getStream(jobId).pipe(
+   map((data) => {
+     return new MessageEvent('message', {
+       data: JSON.stringify(data),
+       lastEventId: '',
+       origin: '',
+       ports: [],
+       source: null
+     });
+   })
+ );
+}
 }

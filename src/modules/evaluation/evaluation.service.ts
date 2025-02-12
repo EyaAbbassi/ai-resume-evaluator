@@ -1,41 +1,81 @@
-import { Injectable } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Observable, ReplaySubject } from 'rxjs';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
+
 
 @Injectable()
 export class EvaluationService {
- private evaluations: Map<string, any> = new Map();
+  private jobs = new Map<string, ReplaySubject<{ data: any }>>(); 
 
- async startEvaluation(jobId: string, resume: Express.Multer.File, jobAssignment: string) {
-  // Store job details temporarily (in-memory storage for simplicity)
-  this.evaluations.set(jobId, { resume, jobAssignment });
- }
+  constructor(private readonly configService: ConfigService) {}
 
- streamEvaluation(jobId: string): Observable<any> {
-  return new Observable((observer) => {
-   const evaluationData = this.evaluations.get(jobId);
-   if (!evaluationData) {
-    observer.error({ message: 'Job ID not found' });
-    return;
-   }
-
-   // Simulating real-time streaming with incremental JSON responses
-   const chunks = [
-    { rating: 4 },
-    { explanation: "Candidate has strong full-stack experience but lacks LangChain expertise." },
-    { final_verdict: "Suitable but needs AI-related improvement." },
-   ];
-
-   let index = 0;
-
-   const interval = setInterval(() => {
-    if (index < chunks.length) {
-     observer.next(chunks[index]); // Send next chunk
-     index++;
-    } else {
-     clearInterval(interval);
-     observer.complete(); // Finish streaming
+  async startEvaluation(
+    jobId: string,
+    resumeFile: Express.Multer.File,
+    jobAssignment: string,
+  ) {
+    const resumeText = await this.extractTextFromPDF(resumeFile.path);
+    const aiStream = new ReplaySubject<{ data: any }>(1);
+    this.jobs.set(jobId, aiStream);
+    
+    const apiKey = this.configService.get<string>('GOOGLE_API_KEY');
+    if (!apiKey) {
+      throw new Error('Missing API key. Set GOOGLE_API_KEY in .env');
     }
-   }, 2000); // Send every 2 seconds (simulating AI processing)
-  });
- }
+
+    const model = new ChatGoogleGenerativeAI({
+      modelName: 'gemini-pro',
+      streaming: true,
+      apiKey,
+    });
+
+    const SYSTEM_MESSAGE = `You are an AI assistant that evaluates resumes strictly based on job requirements. 
+    Provide a rating from 1 to 5, a detailed explanation, and a final verdict in JSON format.`;
+
+    const USER_MESSAGE = `
+    Given the following resume and job assignment, evaluate the resume on a scale of 1 to 5 based on how well it fits the job assignment. Provide a detailed explanation for the rating, highlighting the strengths and weaknesses of the resume in relation to the job assignment. Conclude with a final verdict on whether the candidate is a good fit for the position.
+
+        Resume:
+
+        ${resumeText}
+
+        Job Assignment:
+        ${jobAssignment}
+
+
+        Rating (1-5):
+
+        Explanation:
+
+        Final Verdict:
+
+        `;
+    const responseStream = await model.stream([
+      new SystemMessage(SYSTEM_MESSAGE),
+      new HumanMessage(USER_MESSAGE),
+    ]);
+
+    for await (const chunk of responseStream) {
+      aiStream.next({ data: chunk.content });
+    }
+
+    aiStream.complete();
+  }
+
+  getStream(jobId: string): Observable<{ data: any }> {
+    const stream = this.jobs.get(jobId);
+    if (!stream) {
+      throw new NotFoundException('Job ID not found');
+    }
+    return stream.asObservable();
+  }
+
+  private async extractTextFromPDF(filePath: string): Promise<string> {
+    const loader = new PDFLoader(filePath);
+    const pages = await loader.load();
+    return pages.map((page) => page.pageContent).join('\n');
+  }
 }
