@@ -83,7 +83,6 @@
 <body>
 
   <div class="container">
-    <!-- Left Panel -->
     <div class="left-panel">
       <h1>Resume Evaluation</h1>
       <input type="file" id="resumeFile" accept=".pdf">
@@ -91,7 +90,6 @@
       <button id="submitBtn">Submit for Evaluation</button>
     </div>
 
-    <!-- Right Panel (Results) -->
     <div class="right-panel">
       <h1>Evaluation Results</h1>
       <div id="results">
@@ -124,11 +122,9 @@
       formData.append('resume', resumeFile);
       formData.append('jobAssignment', jobAssignment);
 
-      // Show loading spinner
       loadingMessage.classList.add('active');
-      resultsDiv.innerHTML = '';  // Clear previous results
+      resultsDiv.innerHTML = '';
 
-      // Submit resume and job assignment
       const response = await fetch('http://localhost:3000/evaluate', {
         method: 'POST',
         body: formData,
@@ -136,16 +132,15 @@
       if (response.ok) {
         const { jobId, message } = await response.json();
        setTimeout(() => {
-         streamResults(jobId);  // Begin listening to the stream
-        }, 500);
+         streamResults(jobId);
+        }, 1000);
       } else {
         const error = await response.json();
         resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
-        loadingMessage.classList.remove('active');  // Hide loading spinner if error occurs
+        loadingMessage.classList.remove('active');
       }
     });
 
-    // Function to stream results from SSE
     function streamResults(jobId) {
       const eventSource = new EventSource(`http://localhost:3000/stream/${jobId}`);
            
