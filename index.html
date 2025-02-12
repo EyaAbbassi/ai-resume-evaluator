@@ -135,9 +135,9 @@
       });
       if (response.ok) {
         const { jobId, message } = await response.json();
-      //  setTimeout(() => {
-      //    streamResults(jobId);  // Begin listening to the stream
-      //   }, 500);
+       setTimeout(() => {
+         streamResults(jobId);  // Begin listening to the stream
+        }, 500);
       } else {
         const error = await response.json();
         resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;

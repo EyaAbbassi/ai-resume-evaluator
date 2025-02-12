@@ -52,7 +52,7 @@ export class EvaluationController {
    throw new BadRequestException('Resume file is required');
   }
   const jobId = uuidv4();
-  await this.evaluationService.startEvaluation(jobId, resume, body.jobAssignment);
+  this.evaluationService.startEvaluation(jobId, resume, body.jobAssignment);
   return { jobId, message: `Evaluation started. Stream results from /stream/${jobId}` };
  }
 
