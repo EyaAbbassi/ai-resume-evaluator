@@ -18,7 +18,7 @@ export class EvaluationService {
     jobAssignment: string,
   ) {
     const resumeText = await this.extractTextFromPDF(resumeFile.path);
-    const aiStream = new ReplaySubject<{ data: any }>(1);
+    const aiStream = new ReplaySubject<{ data: any }>();
     this.jobs.set(jobId, aiStream);
     
     const apiKey = this.configService.get<string>('GOOGLE_API_KEY');
@@ -53,16 +53,20 @@ export class EvaluationService {
         Final Verdict:
 
         `;
-    const responseStream = await model.stream([
-      new SystemMessage(SYSTEM_MESSAGE),
-      new HumanMessage(USER_MESSAGE),
-    ]);
+    try {
+      const responseStream = await model.stream([
+        new SystemMessage(SYSTEM_MESSAGE),
+        new HumanMessage(USER_MESSAGE),
+      ]);
+  
+      for await (const chunk of responseStream) {
+        aiStream.next({ data: chunk.content });
+      }
+      aiStream.complete();
 
-    for await (const chunk of responseStream) {
-      aiStream.next({ data: chunk.content });
-    }
-
-    aiStream.complete();
+    } catch (Error) {
+      aiStream.error(Error);
+    } 
   }
 
   getStream(jobId: string): Observable<{ data: any }> {

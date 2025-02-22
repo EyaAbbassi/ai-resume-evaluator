@@ -131,9 +131,7 @@
       });
       if (response.ok) {
         const { jobId, message } = await response.json();
-       setTimeout(() => {
-         streamResults(jobId);
-        }, 1000);
+        streamResults(jobId);
       } else {
         const error = await response.json();
         resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
